@@ -174,3 +174,60 @@ UserID	Most used IP	Count of use
 
 Here is my video on how to partialy solve it:
 https://youtu.be/XON76wBHpIk
+
+
+A small fix: 
+
+-- count the total number of distict urls addresses the suspects have because they are propably looking for a specific sites
+select max(cnt) , min (cnt) from (
+select count(distinct url ) cnt , uid  from log where uid in (2449, 6796, 9237, 4024, 3538, 3608, 7239, 435, 5206, 2211)
+group by uid) a
+
+
+-- shows us the results between  752 and 770:
+
+-- find the other suspects by the count of unique urls
+select uid  from log 
+where uid not in (2449, 6796, 9237, 4024, 3538, 3608, 7239, 435, 5206, 2211)
+group by uid
+having count(distinct url) between 752 and 770
+GO
+
+
+
+-- create a function to sort the ip addresses:
+-- taken from https://stackoverflow.com/questions/20429578/convert-ip-to-32-bit-binary-in-tsql
+create function [dbo].[IntegerIPV4Address]( @IPV4Address VarChar(16) )
+  returns BigInt
+  with SchemaBinding -- Deterministic function.
+  begin
+  -- NB: ParseName   is non-deterministic.
+  declare @Dot1 as Int = CharIndex( '.', @IPV4Address );
+  declare @Dot2 as Int = CharIndex( '.', @IPV4Address, @Dot1 + 1 );
+  declare @Dot3 as Int = CharIndex( '.', @IPV4Address, @Dot2 + 1 );
+  return Cast( Substring( @IPV4Address, 0, @Dot1 ) as BigInt ) * 0x1000000 +
+    Cast( Substring( @IPV4Address, @Dot1 + 1, @Dot2 - @Dot1 - 1 ) as BigInt ) * 0x10000 +  
+    Cast( Substring( @IPV4Address, @Dot2 + 1, @Dot3 - @Dot2 - 1 ) as BigInt ) * 0x100 +
+    Cast( Substring( @IPV4Address, @Dot3 + 1, Len( @IPV4Address ) * 1 ) as BigInt );
+  end
+
+  go
+
+
+-- now the result: 
+  select uid, uip, count(uip)
+from log
+where uid in (
+		-- find the other suspects by the count of unique urls
+		select uid  from log 
+		where uid not in (2449, 6796, 9237, 4024, 3538, 3608, 7239, 435, 5206, 2211)
+		group by uid
+		having count(distinct url) between 752 and 770
+)
+group by uid,uip
+HAVING COUNT(uip) = 601
+order by dbo.[IntegerIPV4Address](uip)  
+
+
+-- and the final answer:
+41.239.144.6,103.205.114.34,127.95.83.100
